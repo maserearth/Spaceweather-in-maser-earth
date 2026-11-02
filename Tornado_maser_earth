@@ -1,0 +1,113 @@
+import numpy as np
+import pandas as pd
+from datetime import datetime, timedelta
+
+class MaserTornadoEngine:
+    def __init__(self, 
+                 p_pix_km: float = 13.522727, 
+                 r_earth_km: float = 6371.0, 
+                 e_total_tuesday: float = 1.0e25,
+                 tau_repair_years: float = 12000.0,
+                 f_carrier_hz: float = 1.8515):
+        """
+        Initializes core planetary matrix parameters and frequency metrics.
+        """
+        self.p_pix = p_pix_km * 1000.0  # Meters
+        self.r_earth = r_earth_km * 1000.0  # Meters
+        self.e_tuesday = e_total_tuesday
+        self.tau_repair = tau_repair_years * 365.24 * 24.0 * 3600.0  # Seconds
+        self.f_carrier = f_carrier_hz
+        
+        # Base physical parameters
+        self.e_0_field = 3.0e6           # V/m
+        self.rho_air = 1.225             # kg/m^3
+        self.phi_strangelet = 5.4e8      # Flux parameter
+
+        # Automatic calculation of global pixel configurations
+        self.area_earth = 4.0 * np.pi * (self.r_earth ** 2)
+        self.n_pix = self.area_earth / (self.p_pix ** 2)
+        self.e_residual_pix = self.e_tuesday / self.n_pix
+
+    def calculate_macro_envelope_days(self) -> float:
+        """
+        Derives the exact day-alignment drift cycle from the carrier wave frequency.
+        """
+        seconds_in_day = 86400.0
+        cycles_per_day = self.f_carrier * seconds_in_day
+        fractional_remainder = cycles_per_day - int(cycles_per_day)
+        
+        if fractional_remainder == 0:
+            return 1.0
+        return float(1.0 / fractional_remainder)
+
+    def generate_timeline_predictions(self, start_date: datetime, num_steps: int = 10) -> pd.DataFrame:
+        """
+        Generates upcoming chronological forecast vectors using the macro-envelope steps.
+        """
+        step_days = self.calculate_macro_envelope_days()
+        timeline_records = []
+        
+        for step in range(num_steps):
+            predicted_dt = start_date + timedelta(days=step * step_days)
+            timeline_records.append({
+                "Envelope_Step": step,
+                "Predicted_Date": predicted_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "Interval_Days": round(step * step_days, 4)
+            })
+            
+        return pd.DataFrame(timeline_records)
+
+    def compute_local_k_scar(self, delta_t_vroom_sec: float, local_poon_weight: float) -> float:
+        """
+        Calculates localized curvature defect density (K_scar).
+        """
+        weighted_residual = self.e_residual_pix * local_poon_weight
+        denominator = (self.p_pix ** 2) * self.tau_repair
+        k_scar = (delta_t_vroom_sec * weighted_residual) / denominator
+        return float(k_scar)
+
+    def calculate_zener_threshold(self, k_scar: float) -> float:
+        """
+        Evaluates the Zener threshold of the barrier matrix precisely at K_scar peaks.
+        """
+        return float(self.e_0_field * np.exp(-k_scar))
+
+    def evaluate_vortex_velocity(self, k_scar: float, baud_ratio: float, radius_meters: float) -> float:
+        """
+        Calculates the angular velocity of the resulting plasma filament.
+        """
+        numerator = self.phi_strangelet * baud_ratio * k_scar
+        denominator = 2.0 * np.pi * self.rho_air * (radius_meters ** 2)
+        return float(numerator / denominator)
+
+# Execution block for raw verification
+if __name__ == "__main__":
+    print("=== MASER-Earth Unified Computational Script ===")
+    engine = MaserTornadoEngine()
+    
+    # 1. Run Timeline Step Tracking
+    macro_days = engine.calculate_macro_envelope_days()
+    print(f"\nCalculated Harmonic Macro-Envelope Cycle: {macro_days:.4f} Days")
+    
+    base_trigger_date = datetime(1925, 3, 5, 0, 0)
+    print(f"Projecting prediction timeline from base date: {base_trigger_date.strftime('%Y-%m-%d')}")
+    predictions_df = engine.generate_timeline_predictions(base_trigger_date, num_steps=5)
+    print(predictions_df.to_string(index=False))
+    
+    # 2. Run Local Core Velocity Calculations
+    vroom_duration_seconds = 1140.0
+    tri_state_poon_weight = 4.5
+    sample_baud_ratio = 1.0145
+    target_radius = 150.0
+    
+    k_scar = engine.compute_local_k_scar(vroom_duration_seconds, tri_state_poon_weight)
+    e_critical = engine.calculate_zener_threshold(k_scar)
+    vortex_rot = engine.evaluate_vortex_velocity(k_scar, sample_baud_ratio, radius_meters=target_radius)
+    
+    # Unit conversions to miles per hour
+    linear_wind_mph = (vortex_rot * target_radius) * 2.23694
+    
+    print("\n--- Structural Physics Metrics ---")
+    print(f" * Curvature Anomaly Density (K_scar): {k_scar:.6f}")
+    print(f" * Degraded Dielectric Field Limit:   {e_critical:,.2f} V/m")
+    print(f" * Boundary Linear Wind Velocity:     {linear_wind_mph:.2f} mph")
